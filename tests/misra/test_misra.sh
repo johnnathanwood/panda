@@ -31,8 +31,9 @@ fi
 cppcheck() {
   # note that cppcheck build cache results in inconsistent results as of v2.13.0
   OUTPUT=$DIR/.output.log
-  $CPPCHECK_DIR/cppcheck --force --inline-suppr -I $PANDA_DIR/board/ \
-          -I $gcc_inc "$(arm-none-eabi-gcc -print-file-name=include)" \
+  $CPPCHECK_DIR/cppcheck --inline-suppr -I $PANDA_DIR/board/ \
+          -I "$(arm-none-eabi-gcc -print-file-name=include)" \
+          -I $PANDA_DIR/board/stm32fx/inc/ -I $PANDA_DIR/board/stm32h7/inc/ \
           --suppressions-list=$DIR/suppressions.txt --suppress=*:*inc/* \
           --suppress=*:*include/* --error-exitcode=2 --check-level=exhaustive \
           --platform=arm32-wchar_t2 \
@@ -45,10 +46,12 @@ cppcheck() {
   fi
 }
 
+
+# arm-none-eabi-gcc -dM -E - < /dev/null
 PANDA_OPTS="--enable=all --disable=unusedFunction -DPANDA --addon=misra"
 
 printf "\n${GREEN}** PANDA F4 CODE **${NC}\n"
-cppcheck $PANDA_OPTS -DSTM32F4 -DUID_BASE $PANDA_DIR/board/main.c
+cppcheck $PANDA_OPTS $GCC_OPTS -DSTM32F4 -DSTM32F413xx $PANDA_DIR/board/main.c
 
 printf "\n${GREEN}** PANDA H7 CODE **${NC}\n"
 cppcheck $PANDA_OPTS -DSTM32H7 -DUID_BASE $PANDA_DIR/board/main.c
