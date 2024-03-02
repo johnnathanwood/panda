@@ -4,7 +4,7 @@ from flaky import flaky
 
 from panda import Panda
 from panda.tests.hitl.conftest import SPEED_NORMAL, SPEED_GMLAN, PandaGroup
-from panda.tests.hitl.helpers import time_many_sends
+from panda.tests.hitl.helpers import time_many_sends, get_random_can_messages
 
 def test_can_loopback(p):
   p.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
@@ -58,6 +58,21 @@ def test_reliability(p):
     # take sub 20ms
     et = (time.monotonic() - st) * 1000.0
     assert et < 20
+
+
+def test_rx_overflow(p, panda_jungle):
+  p.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
+  assert p.health()['rx_buffer_overflow'] == 0
+  for _ in range(1000):
+    panda_junge.send_many(get_random_messages(100))
+  
+  assert p.health()['rx_buffer_overflow'] > 0
+
+  # make sure we can read the full buffer out
+  recv = []
+  for _ in range(5):
+    recv.extend(p.can_recv())
+  assert len(recv) > 10
 
 @flaky(max_runs=6, min_passes=1)
 def test_throughput(p):
