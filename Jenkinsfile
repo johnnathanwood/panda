@@ -82,7 +82,7 @@ pipeline {
               ["build", "scons -j4"],
               ["flash", "cd tests/ && ./reflash_internal_panda.py"],
               ["flash jungle", "cd board/jungle && ./flash.py"],
-              ["test", "cd tests/hitl && HW_TYPES=6 pytest --durations=0 [2-7]*.py -k 'not test_send_recv'"],
+              ["test", "cd tests/hitl && HW_TYPES=6 pytest -n0 --durations=0 [2-7]*.py -k 'not test_send_recv'"],
             ])
           }
         }
@@ -94,12 +94,11 @@ pipeline {
               ["build", "scons -j4"],
               ["flash", "cd tests/ && ./reflash_internal_panda.py"],
               ["flash jungle", "cd board/jungle && ./flash.py"],
-              ["test", "cd tests/hitl && HW_TYPES=9 pytest --durations=0 2*.py [5-9]*.py"],
+              ["test", "cd tests/hitl && HW_TYPES=9 pytest -n0 --durations=0 2*.py [5-9]*.py"],
             ])
           }
         }
 
-        /*
         stage ('Acquire resource locks') {
           options {
             lock(resource: "pandas")
@@ -115,22 +114,24 @@ pipeline {
                 }
               }
             }
-            stage('prep') {
+            stage('jungle tests') {
               steps {
                 script {
                   retry (3) {
-                    docker_run("reset hardware", 3, "python ./tests/ci_reset_hw.py")
+                    docker_run("reset hardware", 3, "python ./tests/hitl/reset_jungles.py")
                   }
                 }
               }
             }
-            stage('pedal tests') {
+            stage('bootkick tests') {
               steps {
                 script {
-                  docker_run("test pedal", 1, "PEDAL_JUNGLE=058010800f51363038363036 python ./tests/pedal/test_pedal.py")
+                  docker_run("test", 10, "pytest -n0 ./tests/som/test_bootkick.py")
                 }
               }
             }
+
+            /*
             stage('HITL tests') {
               steps {
                 script {
@@ -146,9 +147,9 @@ pipeline {
                 }
               }
             }
+            */
           }
         }
-        */
       }
     }
   }

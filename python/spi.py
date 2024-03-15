@@ -9,18 +9,15 @@ import logging
 import threading
 from contextlib import contextmanager
 from functools import reduce
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 from .base import BaseHandle, BaseSTBootloaderHandle, TIMEOUT
 from .constants import McuType, MCU_TYPE_BY_IDCODE, USBPACKET_MAX_SIZE
-from .utils import crc8_pedal
 
 try:
   import spidev
-  import spidev2
 except ImportError:
   spidev = None
-  spidev2 = None
 
 # Constants
 SYNC = 0x5A
@@ -35,6 +32,20 @@ MAX_XFER_RETRY_COUNT = 5
 XFER_SIZE = 0x40*31
 
 DEV_PATH = "/dev/spidev0.0"
+
+
+def crc8(data):
+  crc = 0xFF    # standard init value
+  poly = 0xD5   # standard crc8: x8+x7+x6+x4+x2+1
+  size = len(data)
+  for i in range(size - 1, -1, -1):
+    crc ^= data[i]
+    for _ in range(8):
+      if ((crc & 0x80) != 0):
+        crc = ((crc << 1) ^ poly) & 0xFF
+      else:
+        crc <<= 1
+  return crc
 
 
 class PandaSpiException(Exception):
@@ -194,6 +205,7 @@ class PandaSpiHandle(BaseHandle):
       return dat[3:-1]
 
   def _transfer_kernel_driver(self, spi, endpoint: int, data, timeout: int, max_rx_len: int = 1000, expect_disconnect: bool = False) -> bytes:
+    import spidev2
     self.tx_buf[:len(data)] = data
     self.ioctl_data.endpoint = endpoint
     self.ioctl_data.tx_length = len(data)
@@ -249,7 +261,7 @@ class PandaSpiHandle(BaseHandle):
       # get response
       dat = spi.readbytes(rlen + 1)
       resp = dat[:-1]
-      calculated_crc = crc8_pedal(bytes(version_bytes + resp))
+      calculated_crc = crc8(bytes(version_bytes + resp))
       if calculated_crc != dat[-1]:
         raise PandaSpiBadChecksum
       return bytes(resp)
@@ -329,7 +341,7 @@ class STBootloaderSPIHandle(BaseSTBootloaderHandle):
     elif data != self.ACK:
       raise PandaSpiMissingAck
 
-  def _cmd_no_retry(self, cmd: int, data: Optional[List[bytes]] = None, read_bytes: int = 0, predata=None) -> bytes:
+  def _cmd_no_retry(self, cmd: int, data: list[bytes] | None = None, read_bytes: int = 0, predata=None) -> bytes:
     ret = b""
     with self.dev.acquire() as spi:
       # sync + command
@@ -359,7 +371,7 @@ class STBootloaderSPIHandle(BaseSTBootloaderHandle):
 
     return bytes(ret)
 
-  def _cmd(self, cmd: int, data: Optional[List[bytes]] = None, read_bytes: int = 0, predata=None) -> bytes:
+  def _cmd(self, cmd: int, data: list[bytes] | None = None, read_bytes: int = 0, predata=None) -> bytes:
     exc = PandaSpiException()
     for n in range(MAX_XFER_RETRY_COUNT):
       try:
@@ -402,12 +414,6 @@ class STBootloaderSPIHandle(BaseSTBootloaderHandle):
     self._cmd(0x44, data=[d, ], predata=p)
 
   # *** PandaDFU API ***
-
-  def erase_app(self):
-    self.erase_sector(1)
-
-  def erase_bootstub(self):
-    self.erase_sector(0)
 
   def get_mcu_type(self):
     return self._mcu_type

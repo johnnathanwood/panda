@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import unittest
-from typing import Dict, List
 from panda import Panda
 from panda.tests.libpanda import libpanda_py
 import panda.tests.safety.common as common
@@ -14,8 +13,10 @@ class Buttons:
   CANCEL = 6
 
 
-class GmLongitudinalBase(common.PandaSafetyTest, common.LongitudinalGasBrakeSafetyTest):
+class GmLongitudinalBase(common.PandaCarSafetyTest, common.LongitudinalGasBrakeSafetyTest):
   # pylint: disable=no-member,abstract-method
+
+  RELAY_MALFUNCTION_ADDRS = {0: (0x180, 0x2CB)}  # ASCMLKASteeringCmd, ASCMGasRegenCmd
 
   MAX_POSSIBLE_BRAKE = 2 ** 12
   MAX_BRAKE = 400
@@ -32,7 +33,7 @@ class GmLongitudinalBase(common.PandaSafetyTest, common.LongitudinalGasBrakeSafe
     values = {"GasRegenCmd": gas}
     return self.packer.make_can_msg_panda("ASCMGasRegenCmd", 0, values)
 
-  # override these tests from PandaSafetyTest, GM longitudinal uses button enable
+  # override these tests from PandaCarSafetyTest, GM longitudinal uses button enable
   def _pcm_status_msg(self, enable):
     raise NotImplementedError
 
@@ -68,10 +69,10 @@ class GmLongitudinalBase(common.PandaSafetyTest, common.LongitudinalGasBrakeSafe
     self.assertFalse(self.safety.get_controls_allowed())
 
 
-class TestGmSafetyBase(common.PandaSafetyTest, common.DriverTorqueSteeringSafetyTest):
+class TestGmSafetyBase(common.PandaCarSafetyTest, common.DriverTorqueSteeringSafetyTest):
   STANDSTILL_THRESHOLD = 10 * 0.0311
-  RELAY_MALFUNCTION_ADDR = 0x180
-  RELAY_MALFUNCTION_BUS = 0
+  # Ensures ASCM is off on ASCM cars, and relay is not malfunctioning for camera-ACC cars
+  RELAY_MALFUNCTION_ADDRS = {0: (0x180,)}  # ASCMLKASteeringCmd
   BUTTONS_BUS = 0  # rx or tx
   BRAKE_BUS = 0  # tx only
 
@@ -127,7 +128,8 @@ class TestGmSafetyBase(common.PandaSafetyTest, common.DriverTorqueSteeringSafety
     return self.packer.make_can_msg_panda("AcceleratorPedal2", 0, values)
 
   def _torque_driver_msg(self, torque):
-    values = {"LKADriverAppldTrq": torque}
+    # Safety tests assume driver torque is an int, use DBC factor
+    values = {"LKADriverAppldTrq": torque * 0.01}
     return self.packer.make_can_msg_panda("PSCMStatus", 0, values)
 
   def _torque_cmd_msg(self, torque, steer_req=1):
@@ -144,8 +146,8 @@ class TestGmAscmSafety(GmLongitudinalBase, TestGmSafetyBase):
              [0xA1, 1], [0x306, 1], [0x308, 1], [0x310, 1],  # obs bus
              [0x315, 2],  # ch bus
              [0x104c006c, 3], [0x10400060, 3]]  # gmlan
-  FWD_BLACKLISTED_ADDRS: Dict[int, List[int]] = {}
-  FWD_BUS_LOOKUP: Dict[int, int] = {}
+  FWD_BLACKLISTED_ADDRS: dict[int, list[int]] = {}
+  FWD_BUS_LOOKUP: dict[int, int] = {}
   BRAKE_BUS = 2
 
   MAX_GAS = 3072
